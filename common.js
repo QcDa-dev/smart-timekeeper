@@ -1,4 +1,4 @@
-// Firebase SDK のインポート (※ご自身のFirebaseプロジェクトの設定に置き換えてください)
+// Firebase SDK のインポート
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 import { getFirestore } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
@@ -143,6 +143,11 @@ export const handleLogin = async () => {
 };
 
 export const handleLogout = async () => {
+    // ログアウト確認ポップアップを追加
+    if (!confirm("Smart TimeKeeper からログアウトしますか？")) {
+        return;
+    }
+    
     try {
         await signOut(auth);
         window.location.href = 'index.html'; // ログアウト後はトップへ
