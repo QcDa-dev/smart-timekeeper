@@ -9,7 +9,7 @@
     <link rel="stylesheet" href="common.css">
     <style>
         .font-mono { font-family: 'Roboto Mono', monospace; }
-        .timer-over { color: #ef4444; } /* red-500 */
+        .timer-over { color: #ef4444; } 
         .timer-pulse { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
         @keyframes pulse {
             0%, 100% { opacity: 1; }
@@ -42,8 +42,17 @@
         </div>
 
         <!-- メインタイマー領域 -->
-        <div class="bg-white p-8 rounded-2xl shadow-sm border border-slate-200 mb-4 text-center flex-grow flex flex-col justify-center">
-            <h2 class="text-sm font-bold text-slate-400 mb-2 uppercase tracking-widest">現在進行中の議題</h2>
+        <div class="bg-white p-8 rounded-2xl shadow-sm border border-slate-200 mb-4 text-center flex-grow flex flex-col justify-center relative">
+            
+            <!-- ▼ 強制終了ボタンを追加 ▼ -->
+            <button id="force-finish-btn" class="absolute top-4 right-4 px-3 py-2 bg-red-50 text-red-600 text-sm font-bold rounded-lg hover:bg-red-100 transition flex items-center gap-1">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M5.636 5.636a9 9 0 1 0 12.728 0M12 3v9" />
+                </svg>
+                強制終了
+            </button>
+
+            <h2 class="text-sm font-bold text-slate-400 mb-2 uppercase tracking-widest mt-6">現在進行中の議題</h2>
             <div id="current-item-name" class="text-2xl sm:text-3xl font-bold text-slate-800 mb-6 min-h-[40px]">
                 --
             </div>
@@ -52,11 +61,11 @@
                 00:00
             </div>
 
-            <div class="flex justify-center gap-4">
+            <div class="flex flex-col sm:flex-row justify-center gap-4">
                 <button id="pause-btn" class="px-6 py-4 bg-slate-100 text-slate-700 font-bold rounded-xl hover:bg-slate-200 transition min-w-[120px]">
                     一時停止
                 </button>
-                <button id="next-btn" class="px-8 py-4 bg-blue-600 text-white font-bold rounded-xl shadow-lg hover:bg-blue-700 transition flex items-center gap-2">
+                <button id="next-btn" class="px-8 py-4 bg-blue-600 text-white font-bold rounded-xl shadow-lg hover:bg-blue-700 transition flex items-center justify-center gap-2">
                     完了・次へ
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5">
                       <path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
@@ -84,10 +93,10 @@
         
         let currentIndex = 0;
         let timerInterval = null;
-        let elapsedSecondsCurrentItem = 0; // 現在の項目の経過秒数
+        let elapsedSecondsCurrentItem = 0;
         let isPaused = false;
 
-        let originalTotalSec = 0; // 当初の全体の持ち時間
+        let originalTotalSec = 0;
 
         document.addEventListener('DOMContentLoaded', async () => {
             initCommonUI("Smart TimeKeeper");
@@ -116,10 +125,8 @@
                     meetingData = docSnap.data();
                     document.getElementById('meeting-title').textContent = meetingData.name;
                     
-                    // 当初の予定時間を計算
                     originalTotalSec = meetingData.items.reduce((sum, item) => sum + (item.originalTimeMin * 60), 0);
                     
-                    // 当初の終了時刻を計算して表示
                     const startDt = parseTimeStr(meetingData.startTime);
                     const originalEndDt = new Date(startDt.getTime() + originalTotalSec * 1000);
                     document.getElementById('original-end-time').textContent = formatTimeStr(originalEndDt);
@@ -137,6 +144,8 @@
         function setupEventListeners() {
             document.getElementById('pause-btn').addEventListener('click', togglePause);
             document.getElementById('next-btn').addEventListener('click', handleNextItem);
+            // 強制終了ボタンのイベント
+            document.getElementById('force-finish-btn').addEventListener('click', handleForceFinish);
         }
 
         function startTimer() {
@@ -169,45 +178,50 @@
             }
         }
 
-        // 次へ進む、再配分ロジックの実行
         async function handleNextItem() {
             if (currentIndex >= meetingData.items.length) return;
 
-            // 1. 実績時間を記録
             meetingData.items[currentIndex].actualTimeSec = elapsedSecondsCurrentItem;
-            
-            // 2. 次の項目へ
             currentIndex++;
             elapsedSecondsCurrentItem = 0;
 
             if (currentIndex >= meetingData.items.length) {
-                // 全て終了
                 clearInterval(timerInterval);
                 await finishMeeting();
                 return;
             }
 
-            // 3. 残り時間の再計算（動的再配分）
             recalculateTimes();
-            
-            // 4. UI更新
             updateUI();
         }
 
-        // 動的再配分ロジックのコア
+        // ▼ 追加: 強制終了処理 ▼
+        async function handleForceFinish() {
+            if (!confirm("会議を強制終了しますか？\n現在進行中の議題の時間は記録され、以降の議題は「実績0分」として処理されます。")) {
+                return;
+            }
+
+            // 現在の項目とその後の項目を処理して終了させる
+            for (let i = currentIndex; i < meetingData.items.length; i++) {
+                if (i === currentIndex) {
+                    meetingData.items[i].actualTimeSec = elapsedSecondsCurrentItem;
+                } else {
+                    meetingData.items[i].actualTimeSec = 0;
+                }
+            }
+
+            clearInterval(timerInterval);
+            await finishMeeting();
+        }
+
         function recalculateTimes() {
-            // これまでの経過実績合計（完了した項目のみ）
             let accumulatedActualSec = 0;
             for (let i = 0; i < currentIndex; i++) {
                 accumulatedActualSec += meetingData.items[i].actualTimeSec;
             }
 
-            // 本来の残り時間 = 当初の全体持ち時間 - 実績合計
             let remainingTotalSec = originalTotalSec - accumulatedActualSec;
-
-            // 未実施の固定(fix)項目の初期時間合計
             let remainingFixInitialSec = 0;
-            // 未実施の可変(flex)項目の初期時間合計
             let remainingFlexInitialSec = 0;
 
             for (let i = currentIndex; i < meetingData.items.length; i++) {
@@ -219,7 +233,6 @@
                 }
             }
 
-            // Flex項目に割り当て可能な残時間
             let availableFlexSec = remainingTotalSec - remainingFixInitialSec;
 
             const alertBanner = document.getElementById('alert-banner');
@@ -227,8 +240,6 @@
             const currentEndTime = document.getElementById('current-end-time');
 
             if (availableFlexSec < 0) {
-                // パターンB: 時間超過（Flexを0にしてもFixが収まらない）
-                // 再配分はせず、元の時間を維持。終了時刻が延びる。
                 alertBanner.classList.remove('hidden');
                 currentEndLabel.classList.add('text-red-500');
                 currentEndTime.classList.remove('text-blue-600');
@@ -238,7 +249,6 @@
                     meetingData.items[i].calculatedTimeSec = meetingData.items[i].originalTimeMin * 60;
                 }
             } else {
-                // パターンA: 調整可能
                 alertBanner.classList.add('hidden');
                 currentEndLabel.classList.remove('text-red-500');
                 currentEndTime.classList.add('text-blue-600');
@@ -247,7 +257,6 @@
                 for (let i = currentIndex; i < meetingData.items.length; i++) {
                     const item = meetingData.items[i];
                     if (item.type === 'flex' && remainingFlexInitialSec > 0) {
-                        // 比例按分
                         const ratio = (item.originalTimeMin * 60) / remainingFlexInitialSec;
                         item.calculatedTimeSec = Math.round(availableFlexSec * ratio);
                     } else if (item.type === 'fix') {
@@ -257,14 +266,12 @@
             }
         }
 
-        // 画面の更新
         function updateUI() {
             if (currentIndex >= meetingData.items.length) return;
 
             const currentItem = meetingData.items[currentIndex];
             document.getElementById('current-item-name').textContent = currentItem.name;
             
-            // 最後の項目ならボタンテキスト変更
             if (currentIndex === meetingData.items.length - 1) {
                 const nextBtn = document.getElementById('next-btn');
                 nextBtn.innerHTML = `会議を終了する <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>`;
@@ -277,16 +284,13 @@
             updateCurrentEndTime();
         }
 
-        // タイマー数字の更新
         function updateTimerDisplay() {
             const currentItem = meetingData.items[currentIndex];
-            // 割り当てられた時間 - 経過時間
             let remainingSec = currentItem.calculatedTimeSec - elapsedSecondsCurrentItem;
             
             const display = document.getElementById('timer-display');
             if (remainingSec < 0) {
                 display.classList.add('timer-over');
-                // 超過時はプラス表示にして赤くする
                 remainingSec = Math.abs(remainingSec);
                 display.textContent = "-" + formatSeconds(remainingSec);
             } else {
@@ -295,21 +299,16 @@
             }
         }
 
-        // 現在の終了予定時刻の計算と表示
         function updateCurrentEndTime() {
             let totalActualAndCalculatedSec = 0;
-            // 完了した項目の実績時間
             for (let i = 0; i < currentIndex; i++) {
                 totalActualAndCalculatedSec += meetingData.items[i].actualTimeSec;
             }
-            // 進行中の項目の経過時間
             totalActualAndCalculatedSec += elapsedSecondsCurrentItem;
             
-            // 進行中の項目の残り時間（計算上）※マイナスの場合は0として扱う（既に経過時間に足されているため）
             let currentRemaining = meetingData.items[currentIndex].calculatedTimeSec - elapsedSecondsCurrentItem;
             if (currentRemaining > 0) totalActualAndCalculatedSec += currentRemaining;
 
-            // 未実施の項目の計算上の時間
             for (let i = currentIndex + 1; i < meetingData.items.length; i++) {
                 totalActualAndCalculatedSec += meetingData.items[i].calculatedTimeSec;
             }
@@ -319,7 +318,6 @@
             document.getElementById('current-end-time').textContent = formatTimeStr(currentEndDt);
         }
 
-        // 今後のアジェンダ一覧の描画
         function updateUpcomingList() {
             const listDiv = document.getElementById('upcoming-list');
             listDiv.innerHTML = '';
@@ -334,7 +332,6 @@
                 const calcMin = Math.round(item.calculatedTimeSec / 60);
                 const originalMin = item.originalTimeMin;
                 
-                // 時間が削られている場合は警告色
                 const timeColorClass = (calcMin < originalMin) ? 'text-amber-600 font-bold' : 'text-slate-700';
 
                 const div = document.createElement('div');
@@ -352,7 +349,6 @@
             }
         }
 
-        // 会議終了処理
         async function finishMeeting() {
             try {
                 const docRef = doc(db, `users/${currentUser.uid}/records`, recordId);
@@ -361,7 +357,6 @@
                     status: 'completed',
                     completedAt: new Date()
                 });
-                // 今後作成する履歴詳細画面へ遷移
                 window.location.href = `history.html?id=${recordId}`;
             } catch (error) {
                 console.error("更新エラー:", error);
@@ -369,7 +364,6 @@
             }
         }
 
-        // ユーティリティ
         function formatSeconds(sec) {
             const m = Math.floor(sec / 60).toString().padStart(2, '0');
             const s = (sec % 60).toString().padStart(2, '0');
@@ -377,7 +371,6 @@
         }
 
         function parseTimeStr(timeStr) {
-            // "14:30" などを Date オブジェクトに（本日の日付として）
             const [hours, minutes] = timeStr.split(':').map(Number);
             const dt = new Date();
             dt.setHours(hours, minutes, 0, 0);
