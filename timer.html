@@ -38,10 +38,14 @@
         <!-- ヘッダー情報（会議名・時刻） -->
         <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 mb-4 flex flex-col sm:flex-row justify-between items-center gap-4">
             <h1 id="meeting-title" class="text-xl font-bold text-slate-800 truncate w-full sm:w-auto">会議を読み込み中...</h1>
-            <div class="flex gap-4 sm:gap-6 text-sm font-medium w-full sm:w-auto justify-between sm:justify-end">
+            <div class="flex flex-wrap gap-4 sm:gap-6 text-sm font-medium w-full sm:w-auto justify-between sm:justify-end">
                 <div class="text-center">
                     <p class="text-slate-400 text-xs">開始予定</p>
                     <p id="meeting-start-time" class="text-slate-700">--:--</p>
+                </div>
+                <div class="text-center border-l pl-4 border-slate-200">
+                    <p class="text-slate-400 text-xs">実際の開始</p>
+                    <p id="actual-start-time" class="text-slate-700">--:--</p>
                 </div>
                 <div class="text-center border-l pl-4 border-slate-200">
                     <p class="text-slate-400 text-xs">当初の終了予定</p>
@@ -141,6 +145,10 @@
                     document.getElementById('meeting-title').textContent = meetingData.name;
                     document.getElementById('meeting-start-time').textContent = meetingData.startTime;
                     
+                    if (meetingData.actualStartTime) {
+                        document.getElementById('actual-start-time').textContent = meetingData.actualStartTime;
+                    }
+
                     originalTotalSec = meetingData.items.reduce((sum, item) => sum + (item.originalTimeMin * 60), 0);
                     
                     const startDt = parseTimeStr(meetingData.startTime);
@@ -156,7 +164,9 @@
                         // 開始時刻前なら待機オーバーレイを表示
                         document.getElementById('overlay-start-time').textContent = meetingData.startTime;
                         document.getElementById('start-overlay').classList.remove('hidden');
-                        updateUI(); // 表示だけはしておく
+                        
+                        // 仮の終了時刻（実際の開始がまだなので予定時刻から計算）を表示
+                        document.getElementById('current-end-time').textContent = formatTimeStr(originalEndDt);
                     } else {
                         // 既に時刻を過ぎている or 再開の場合はすぐスタート
                         startTimer();
@@ -177,10 +187,16 @@
             
             // 待機画面の「今すぐ開始」ボタン
             document.getElementById('manual-start-btn').addEventListener('click', async () => {
+                const now = new Date();
+                const actualStartTimeStr = formatTimeStr(now);
+                meetingData.actualStartTime = actualStartTimeStr;
+                document.getElementById('actual-start-time').textContent = actualStartTimeStr;
+
                 document.getElementById('start-overlay').classList.add('hidden');
-                // ステータスをrunningに更新
+                // ステータスをrunningに更新し、実際の開始時刻も保存
                 await updateDoc(doc(db, `users/${currentUser.uid}/records`, recordId), {
-                    status: 'running'
+                    status: 'running',
+                    actualStartTime: actualStartTimeStr
                 });
                 startTimer();
             });
@@ -379,7 +395,9 @@
                 totalCalcSec += meetingData.items[i].calculatedTimeSec;
             }
 
-            const startDt = parseTimeStr(meetingData.startTime);
+            // 実際の開始時刻を基準にする（未開始の場合は予定時刻）
+            const baseTimeStr = meetingData.actualStartTime || meetingData.startTime;
+            const startDt = parseTimeStr(baseTimeStr);
             const currentEndDt = new Date(startDt.getTime() + totalCalcSec * 1000);
             document.getElementById('current-end-time').textContent = formatTimeStr(currentEndDt);
         }
