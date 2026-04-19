@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ログイン | Smart TimeKeeper</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="common.css">
+</head>
+<body>
+
+    <main class="flex items-center justify-center py-20 px-4">
+        <div class="bg-white p-8 sm:p-10 rounded-2xl shadow-xl w-full max-w-md text-center border border-slate-100">
+            <div class="inline-flex items-center justify-center p-3 bg-blue-50 rounded-xl mb-6">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-10 h-10 text-blue-600">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                </svg>
+            </div>
+            
+            <h1 class="text-2xl font-bold text-slate-900 mb-2">Smart TimeKeeperへようこそ</h1>
+            <p class="text-slate-500 mb-8 text-sm">
+                アジェンダを作成し、会議の時間をスマートに管理しましょう。ご利用にはGoogleアカウントが必要です。
+            </p>
+
+            <button id="loginBtn" class="w-full flex items-center justify-center gap-3 bg-white border-2 border-slate-200 hover:bg-slate-50 text-slate-700 font-bold py-3 px-4 rounded-xl transition duration-200">
+                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google Logo" class="w-6 h-6">
+                <span>Googleでログイン・新規登録</span>
+            </button>
+            
+            <div class="mt-8 text-xs text-slate-400">
+                ログインすることで、<a href="https://qcda-dev.github.io/HP/terms-of-service.html" target="_blank" class="underline hover:text-slate-600">利用規約</a>および<a href="https://qcda-dev.github.io/HP/community-guidelines.html" target="_blank" class="underline hover:text-slate-600">コミュニティガイドライン</a>に同意したものとみなされます。
+            </div>
+        </div>
+    </main>
+
+    <script type="module">
+        import { initCommonUI, authGuard, handleLogin } from './common.js';
+        
+        document.addEventListener('DOMContentLoaded', async () => {
+            initCommonUI("ログイン");
+            // ログイン済みの場合はダッシュボードへリダイレクト
+            await authGuard(false);
+            
+            document.getElementById('loginBtn').addEventListener('click', handleLogin);
+        });
+    </script>
+</body>
+</html>
