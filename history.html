@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>会議記録 | Smart TimeKeeper</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="common.css">
+</head>
+<body class="bg-slate-50">
+
+    <main class="py-8 px-4 sm:px-6 max-w-4xl mx-auto w-full">
+        <div class="mb-6 flex items-center justify-between">
+            <h1 class="text-2xl font-bold text-slate-800">会議結果の振り返り</h1>
+            <button onclick="window.location.href='dashboard.html'" class="text-sm text-slate-500 hover:text-slate-800 underline flex items-center gap-1">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" /></svg>
+                ダッシュボードへ戻る
+            </button>
+        </div>
+
+        <div id="loading-indicator" class="flex justify-center items-center py-20">
+            <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div>
+        </div>
+
+        <div id="content-area" class="hidden space-y-6">
+            <!-- 会議概要 -->
+            <section class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                <div class="flex flex-col md:flex-row justify-between md:items-center gap-4 border-b border-slate-100 pb-4 mb-4">
+                    <div>
+                        <h2 id="meeting-title" class="text-xl font-bold text-slate-800">--</h2>
+                        <p id="meeting-date" class="text-sm text-slate-500 mt-1">--</p>
+                    </div>
+                    <div id="overall-status" class="px-4 py-2 rounded-lg font-bold text-center">
+                        <!-- 予定通り/超過/巻いた 等を表示 -->
+                    </div>
+                </div>
+                
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                    <div class="p-3 bg-slate-50 rounded-xl">
+                        <p class="text-xs text-slate-500 mb-1">当初の予定時間</p>
+                        <p id="total-original-time" class="text-lg font-bold text-slate-700">-- 分</p>
+                    </div>
+                    <div class="p-3 bg-slate-50 rounded-xl">
+                        <p class="text-xs text-slate-500 mb-1">実際にかかった時間</p>
+                        <p id="total-actual-time" class="text-lg font-bold text-blue-600">-- 分</p>
+                    </div>
+                    <div class="p-3 bg-slate-50 rounded-xl">
+                        <p class="text-xs text-slate-500 mb-1">開始予定時刻</p>
+                        <p id="start-time-display" class="text-lg font-bold text-slate-700">--:--</p>
+                    </div>
+                    <div class="p-3 bg-slate-50 rounded-xl">
+                        <p class="text-xs text-slate-500 mb-1">実際の終了時刻</p>
+                        <p id="end-time-display" class="text-lg font-bold text-slate-700">--:--</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- アジェンダ別詳細 -->
+            <section class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                <h3 class="text-lg font-bold text-slate-800 mb-4">議題ごとのタイムライン分析</h3>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm text-left">
+                        <thead class="text-xs text-slate-500 uppercase bg-slate-50 border-b border-slate-200">
+                            <tr>
+                                <th class="px-4 py-3 font-medium">議題名</th>
+                                <th class="px-4 py-3 font-medium text-center">属性</th>
+                                <th class="px-4 py-3 font-medium text-right">予定</th>
+                                <th class="px-4 py-3 font-medium text-right">実績</th>
+                                <th class="px-4 py-3 font-medium text-right">差異</th>
+                            </tr>
+                        </thead>
+                        <tbody id="items-tbody" class="divide-y divide-slate-100">
+                            <!-- JSで動的に追加 -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <script type="module">
+        import { initCommonUI, authGuard, db } from './common.js';
+        import { doc, getDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        let currentUser = null;
+        let recordId = null;
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            initCommonUI("Smart TimeKeeper");
+            currentUser = await authGuard(true, 'login.html');
+            if (!currentUser) return;
+
+            const urlParams = new URLSearchParams(window.location.search);
+            recordId = urlParams.get('id');
+            
+            if (recordId) {
+                await loadRecordData();
+            } else {
+                alert("指定されたデータが見つかりません。");
+                window.location.href = 'dashboard.html';
+            }
+        });
+
+        async function loadRecordData() {
+            try {
+                const docRef = doc(db, `users/${currentUser.uid}/records`, recordId);
+                const docSnap = await getDoc(docRef);
+
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    renderData(data);
+                } else {
+                    alert("データが存在しません。");
+                    window.location.href = 'dashboard.html';
+                }
+            } catch (error) {
+                console.error("読み込みエラー:", error);
+                alert("データの読み込みに失敗しました。");
+            } finally {
+                document.getElementById('loading-indicator').classList.add('hidden');
+                document.getElementById('content-area').classList.remove('hidden');
+            }
+        }
+
+        function renderData(data) {
+            // 基本情報
+            document.getElementById('meeting-title').textContent = data.name || '無題の会議';
+            
+            const createdAtDate = data.createdAt ? new Date(data.createdAt.toMillis()) : new Date();
+            document.getElementById('meeting-date').textContent = `実施日: ${createdAtDate.toLocaleDateString('ja-JP')}`;
+            document.getElementById('start-time-display').textContent = data.startTime || '--:--';
+            
+            const completedAtDate = data.completedAt ? new Date(data.completedAt.toMillis()) : null;
+            document.getElementById('end-time-display').textContent = completedAtDate ? 
+                `${String(completedAtDate.getHours()).padStart(2, '0')}:${String(completedAtDate.getMinutes()).padStart(2, '0')}` : '--:--';
+
+            // 時間計算
+            let totalOriginalSec = 0;
+            let totalActualSec = 0;
+            const tbody = document.getElementById('items-tbody');
+            tbody.innerHTML = '';
+
+            data.items.forEach(item => {
+                const originalSec = item.originalTimeMin * 60;
+                const actualSec = item.actualTimeSec || 0;
+                
+                totalOriginalSec += originalSec;
+                totalActualSec += actualSec;
+
+                const diffSec = actualSec - originalSec;
+                let diffHtml = '';
+                if (diffSec > 60) {
+                    // 1分以上オーバー
+                    diffHtml = `<span class="text-red-500 font-bold">+${formatMinutes(diffSec)}</span>`;
+                } else if (diffSec < -60) {
+                    // 1分以上巻いた
+                    diffHtml = `<span class="text-blue-500 font-bold">-${formatMinutes(Math.abs(diffSec))}</span>`;
+                } else {
+                    diffHtml = `<span class="text-slate-400">±0分</span>`;
+                }
+
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="px-4 py-3 font-medium text-slate-800">${escapeHtml(item.name)}</td>
+                    <td class="px-4 py-3 text-center">
+                        <span class="text-xs px-2 py-1 rounded bg-slate-100 text-slate-600">${item.type === 'fix' ? '固定' : '可変'}</span>
+                    </td>
+                    <td class="px-4 py-3 text-right text-slate-500">${item.originalTimeMin}分</td>
+                    <td class="px-4 py-3 text-right font-medium text-slate-700">${formatMinutes(actualSec)}</td>
+                    <td class="px-4 py-3 text-right">${diffHtml}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            // 全体サマリー
+            const totalOriginalMin = Math.round(totalOriginalSec / 60);
+            const totalActualMin = Math.round(totalActualSec / 60);
+            
+            document.getElementById('total-original-time').textContent = `${totalOriginalMin} 分`;
+            document.getElementById('total-actual-time').textContent = `${totalActualMin} 分`;
+
+            const overallStatusEl = document.getElementById('overall-status');
+            const diffTotal = totalActualMin - totalOriginalMin;
+            
+            if (diffTotal > 0) {
+                overallStatusEl.className = 'px-4 py-2 rounded-lg font-bold text-center bg-red-100 text-red-700';
+                overallStatusEl.textContent = `予定より ${diffTotal} 分 オーバーしました`;
+            } else if (diffTotal < 0) {
+                overallStatusEl.className = 'px-4 py-2 rounded-lg font-bold text-center bg-blue-100 text-blue-700';
+                overallStatusEl.textContent = `予定より ${Math.abs(diffTotal)} 分 早く終了しました`;
+            } else {
+                overallStatusEl.className = 'px-4 py-2 rounded-lg font-bold text-center bg-green-100 text-green-700';
+                overallStatusEl.textContent = '予定通りに進行しました！';
+            }
+        }
+
+        // 秒を「〇〇分」または「〇〇分〇〇秒」に変換
+        function formatMinutes(totalSeconds) {
+            const m = Math.floor(totalSeconds / 60);
+            const s = totalSeconds % 60;
+            if (m === 0) return `${s}秒`;
+            if (s === 0) return `${m}分`;
+            return `${m}分${s}秒`;
+        }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return str.replace(/[&<>"']/g, function(match) {
+                const escape = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+                return escape[match];
+            });
+        }
+    </script>
+</body>
+</html>
