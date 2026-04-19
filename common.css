@@ -24,7 +24,6 @@ main {
     transition: 0.4s;
 }
 
-/* メニュー開閉時のバツ印アニメーション */
 .hamburger-btn.open .bar1 {
     transform: rotate(-45deg) translate(-5px, 5px);
 }
@@ -35,7 +34,6 @@ main {
     transform: rotate(45deg) translate(-5px, -5px);
 }
 
-/* サイドナビゲーション */
 .sidenav {
     height: 100%;
     width: 0;
@@ -91,7 +89,6 @@ main {
     color: #cbd5e1;
 }
 
-/* オーバーレイ */
 #menuOverlay {
     position: fixed;
     display: none;
@@ -105,5 +102,17 @@ main {
     backdrop-filter: blur(2px);
 }
 
-/* ユーティリティ */
 .hidden { display: none !important; }
+
+/* ▼ 追加: ドラッグ＆ドロップ用のスタイル ▼ */
+.drag-handle {
+    cursor: grab;
+}
+.drag-handle:active {
+    cursor: grabbing;
+}
+.sortable-ghost {
+    opacity: 0.4;
+    background-color: #e2e8f0;
+    border: 2px dashed #94a3b8;
+}
