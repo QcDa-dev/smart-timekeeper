@@ -3,12 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ひな形の編集 | Smart TimeKeeper</title>
+    <title>事前セットアップの編集 | Smart TimeKeeper</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="common.css">
     <style>
-        /* ドラッグ時のスタイル調整用（将来拡張用） */
         .agenda-item { transition: all 0.2s; }
     </style>
 </head>
@@ -16,15 +15,15 @@
 
     <main class="py-8 px-4 sm:px-6 max-w-3xl mx-auto w-full">
         <div class="mb-6 flex items-center justify-between">
-            <h1 id="page-title" class="text-2xl font-bold text-slate-800">ひな形の作成</h1>
+            <h1 id="page-title" class="text-2xl font-bold text-slate-800">事前セットアップの作成</h1>
             <button onclick="window.location.href='dashboard.html'" class="text-sm text-slate-500 hover:text-slate-800 underline">キャンセル</button>
         </div>
 
-        <form id="template-form" class="space-y-6">
-            <!-- ひな形名 -->
+        <form id="setup-form" class="space-y-6">
+            <!-- セットアップ名 -->
             <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-                <label for="template-name" class="block text-sm font-bold text-slate-700 mb-2">ひな形名</label>
-                <input type="text" id="template-name" placeholder="例：週次進捗会議" required
+                <label for="setup-name" class="block text-sm font-bold text-slate-700 mb-2">セットアップ名（フォーマット名）</label>
+                <input type="text" id="setup-name" placeholder="例：週次進捗会議フォーマット" required
                     class="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition">
             </div>
 
@@ -70,11 +69,11 @@
         import { doc, getDoc, setDoc, deleteDoc, collection } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
         let currentUser = null;
-        let templateId = null;
+        let setupId = null;
 
         // URLからIDを取得
         const urlParams = new URLSearchParams(window.location.search);
-        templateId = urlParams.get('id');
+        setupId = urlParams.get('id');
 
         document.addEventListener('DOMContentLoaded', async () => {
             initCommonUI("Smart TimeKeeper");
@@ -83,12 +82,11 @@
 
             setupEventListeners();
 
-            if (templateId) {
-                document.getElementById('page-title').textContent = "ひな形の編集";
+            if (setupId) {
+                document.getElementById('page-title').textContent = "事前セットアップの編集";
                 document.getElementById('delete-btn').classList.remove('hidden');
-                await loadTemplateData();
+                await loadSetupData();
             } else {
-                // 新規作成時はデフォルトで1つ空の項目を追加しておく
                 addAgendaItem();
             }
             updateTotalTime();
@@ -100,8 +98,7 @@
                 updateTotalTime();
             });
 
-            document.getElementById('template-form').addEventListener('submit', handleSave);
-            
+            document.getElementById('setup-form').addEventListener('submit', handleSave);
             document.getElementById('delete-btn').addEventListener('click', handleDelete);
         }
 
@@ -134,19 +131,15 @@
                 </div>
             `;
 
-            // 削除ボタンのイベント
             itemDiv.querySelector('.remove-item-btn').addEventListener('click', () => {
                 itemDiv.remove();
                 updateTotalTime();
             });
 
-            // 時間変更時に合計時間を更新
             itemDiv.querySelector('.item-time').addEventListener('input', updateTotalTime);
-
             container.appendChild(itemDiv);
         }
 
-        // 合計時間の計算と表示更新
         function updateTotalTime() {
             const timeInputs = document.querySelectorAll('.item-time');
             let total = 0;
@@ -156,15 +149,15 @@
             document.getElementById('total-time-display').textContent = total;
         }
 
-        // 既存データの読み込み
-        async function loadTemplateData() {
+        async function loadSetupData() {
             try {
-                const docRef = doc(db, `users/${currentUser.uid}/templates`, templateId);
+                // templates から setups に変更
+                const docRef = doc(db, `users/${currentUser.uid}/setups`, setupId);
                 const docSnap = await getDoc(docRef);
 
                 if (docSnap.exists()) {
                     const data = docSnap.data();
-                    document.getElementById('template-name').value = data.name || '';
+                    document.getElementById('setup-name').value = data.name || '';
                     
                     if (data.items && data.items.length > 0) {
                         data.items.forEach(item => {
@@ -175,7 +168,7 @@
                     }
                     updateTotalTime();
                 } else {
-                    alert("指定されたひな形が見つかりません。");
+                    alert("指定された事前セットアップが見つかりません。");
                     window.location.href = 'dashboard.html';
                 }
             } catch (error) {
@@ -184,11 +177,10 @@
             }
         }
 
-        // 保存処理
         async function handleSave(e) {
             e.preventDefault();
             
-            const name = document.getElementById('template-name').value.trim();
+            const name = document.getElementById('setup-name').value.trim();
             const itemElements = document.querySelectorAll('.agenda-item');
             
             if (itemElements.length === 0) {
@@ -210,10 +202,9 @@
             saveBtn.innerHTML = "保存中...";
 
             try {
-                // 新規作成の場合はランダムなIDを生成、編集の場合は既存のIDを使用
-                const targetRef = templateId 
-                    ? doc(db, `users/${currentUser.uid}/templates`, templateId)
-                    : doc(collection(db, `users/${currentUser.uid}/templates`));
+                const targetRef = setupId 
+                    ? doc(db, `users/${currentUser.uid}/setups`, setupId)
+                    : doc(collection(db, `users/${currentUser.uid}/setups`));
 
                 await setDoc(targetRef, {
                     name: name,
@@ -232,12 +223,11 @@
             }
         }
 
-        // 削除処理
         async function handleDelete() {
-            if (!confirm("本当にこのひな形を削除しますか？")) return;
+            if (!confirm("本当にこの事前セットアップを削除しますか？")) return;
 
             try {
-                await deleteDoc(doc(db, `users/${currentUser.uid}/templates`, templateId));
+                await deleteDoc(doc(db, `users/${currentUser.uid}/setups`, setupId));
                 alert("削除しました。");
                 window.location.href = 'dashboard.html';
             } catch (error) {
@@ -246,7 +236,6 @@
             }
         }
 
-        // XSS対策用
         function escapeHtml(str) {
             if (!str) return '';
             return str.replace(/[&<>"']/g, function(match) {
