@@ -169,6 +169,19 @@
                         document.getElementById('current-end-time').textContent = formatTimeStr(originalEndDt);
                     } else {
                         // 既に時刻を過ぎている or 再開の場合はすぐスタート
+                        if (!meetingData.actualStartTime) {
+                            // 待機画面を経由せず即スタートした場合でも、実際の開始時刻を記録・表示
+                            const actualStartTimeStr = formatTimeStr(now);
+                            meetingData.actualStartTime = actualStartTimeStr;
+                            document.getElementById('actual-start-time').textContent = actualStartTimeStr;
+                            updateDoc(docRef, { actualStartTime: actualStartTimeStr }).catch(console.error);
+                        }
+
+                        // 初期の「現在の終了予定」を、実際の開始時刻を基準に再計算する
+                        const actualStartDt = parseTimeStr(meetingData.actualStartTime);
+                        const currentEndDt = new Date(actualStartDt.getTime() + originalTotalSec * 1000);
+                        document.getElementById('current-end-time').textContent = formatTimeStr(currentEndDt);
+
                         startTimer();
                     }
                 } else {
