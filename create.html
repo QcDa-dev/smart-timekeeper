@@ -59,8 +59,14 @@
             </div>
 
             <!-- アクションボタン -->
-            <div class="flex justify-end pt-4">
-                <button type="submit" id="start-btn" class="px-8 py-3 bg-blue-600 text-white font-bold rounded-xl shadow-lg hover:bg-blue-700 transition flex items-center gap-2">
+            <div class="flex flex-col sm:flex-row justify-end gap-3 pt-4">
+                <button type="button" id="save-template-btn" class="px-6 py-3 bg-white border border-slate-300 text-slate-700 font-bold rounded-xl shadow-sm hover:bg-slate-50 transition flex items-center justify-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5 text-teal-600">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0 1 11.186 0Z" />
+                    </svg>
+                    現在の内容をひな形として保存
+                </button>
+                <button type="submit" id="start-btn" class="px-8 py-3 bg-blue-600 text-white font-bold rounded-xl shadow-lg hover:bg-blue-700 transition flex items-center justify-center gap-2">
                     会議を開始する
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5">
                       <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z" />
@@ -104,6 +110,9 @@
                 updateTotalTime();
             });
             document.getElementById('create-form').addEventListener('submit', handleStartMeeting);
+            
+            // ひな形として保存ボタンのイベント
+            document.getElementById('save-template-btn').addEventListener('click', handleSaveAsTemplate);
         }
 
         // 議題アイテムのDOMを生成して追加
@@ -174,6 +183,41 @@
             } catch (error) {
                 console.error("読み込みエラー:", error);
                 alert("ひな形の読み込みに失敗しました。");
+            }
+        }
+
+        // ▼ 追加: ひな形として保存する処理 ▼
+        async function handleSaveAsTemplate() {
+            const itemElements = document.querySelectorAll('.agenda-item');
+            if (itemElements.length === 0) {
+                alert("保存する議題がありません。");
+                return;
+            }
+
+            const templateName = prompt("保存するひな形の名前を入力してください", "新しいひな形");
+            if (!templateName) return; // キャンセルされた場合
+
+            const items = [];
+            itemElements.forEach(el => {
+                items.push({
+                    name: el.querySelector('.item-name').value.trim(),
+                    time: parseInt(el.querySelector('.item-time').value) || 0,
+                    type: el.querySelector('.item-type').value
+                });
+            });
+
+            try {
+                // 新しいドキュメントとして templates コレクションに保存
+                const newTemplateRef = doc(collection(db, `users/${currentUser.uid}/templates`));
+                await setDoc(newTemplateRef, {
+                    name: templateName,
+                    items: items,
+                    updatedAt: new Date()
+                });
+                alert(`「${templateName}」をひな形として保存しました！\n（会議を開始するには「会議を開始する」ボタンを押してください）`);
+            } catch (error) {
+                console.error("保存エラー:", error);
+                alert("ひな形の保存に失敗しました。");
             }
         }
 
