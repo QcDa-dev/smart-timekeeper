@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>新しい会議を始める | Smart TimeKeeper</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="common.css">
+</head>
+<body>
+
+    <main class="py-8 px-4 sm:px-6 max-w-3xl mx-auto w-full">
+        <div class="mb-6 flex items-center justify-between">
+            <h1 class="text-2xl font-bold text-slate-800">新しい会議を始める</h1>
+            <button onclick="window.location.href='dashboard.html'" class="text-sm text-slate-500 hover:text-slate-800 underline">キャンセル</button>
+        </div>
+
+        <form id="create-form" class="space-y-6">
+            <!-- 会議の基本情報 -->
+            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label for="meeting-name" class="block text-sm font-bold text-slate-700 mb-2">会議名</label>
+                        <input type="text" id="meeting-name" placeholder="例：〇〇プロジェクト定例" required
+                            class="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none transition">
+                    </div>
+                    <div>
+                        <label for="start-time" class="block text-sm font-bold text-slate-700 mb-2">開始予定時刻</label>
+                        <input type="time" id="start-time" required
+                            class="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none transition">
+                    </div>
+                </div>
+            </div>
+
+            <!-- アジェンダ（議題）リスト -->
+            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-lg font-bold text-slate-800">議題リスト（今回用）</h2>
+                    <div class="text-sm font-medium text-slate-500">
+                        合計: <span id="total-time-display" class="text-blue-600 font-bold text-lg">0</span> 分
+                    </div>
+                </div>
+                
+                <p class="text-xs text-slate-500 mb-4">
+                    ※ひな形を読み込んだ場合でも、今回の会議に合わせて項目を追加・修正できます。
+                </p>
+
+                <div id="items-container" class="space-y-3">
+                    <!-- JavaScriptで項目が追加されます -->
+                </div>
+
+                <button type="button" id="add-item-btn" class="mt-6 w-full py-3 border-2 border-dashed border-slate-300 text-slate-600 font-medium rounded-xl hover:bg-slate-50 hover:border-blue-400 hover:text-blue-600 transition flex justify-center items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                    </svg>
+                    議題を追加する
+                </button>
+            </div>
+
+            <!-- アクションボタン -->
+            <div class="flex justify-end pt-4">
+                <button type="submit" id="start-btn" class="px-8 py-3 bg-blue-600 text-white font-bold rounded-xl shadow-lg hover:bg-blue-700 transition flex items-center gap-2">
+                    会議を開始する
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z" />
+                    </svg>
+                </button>
+            </div>
+        </form>
+    </main>
+
+    <script type="module">
+        import { initCommonUI, authGuard, db } from './common.js';
+        import { doc, getDoc, setDoc, collection } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        let currentUser = null;
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            initCommonUI("Smart TimeKeeper");
+            currentUser = await authGuard(true, 'login.html');
+            if (!currentUser) return;
+
+            // 現在時刻を開始予定時刻のデフォルトに設定
+            const now = new Date();
+            document.getElementById('start-time').value = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+            setupEventListeners();
+
+            // URLにtemplateIdがあれば、ひな形を読み込む
+            const urlParams = new URLSearchParams(window.location.search);
+            const templateId = urlParams.get('templateId');
+            if (templateId) {
+                await loadTemplateData(templateId);
+            } else {
+                addAgendaItem(); // 空の項目を1つ追加
+                updateTotalTime();
+            }
+        });
+
+        function setupEventListeners() {
+            document.getElementById('add-item-btn').addEventListener('click', () => {
+                addAgendaItem();
+                updateTotalTime();
+            });
+            document.getElementById('create-form').addEventListener('submit', handleStartMeeting);
+        }
+
+        // 議題アイテムのDOMを生成して追加
+        function addAgendaItem(name = '', time = 10, type = 'flex') {
+            const container = document.getElementById('items-container');
+            const itemDiv = document.createElement('div');
+            itemDiv.className = 'agenda-item flex flex-col sm:flex-row gap-3 items-center bg-slate-50 p-3 rounded-xl border border-slate-200';
+
+            itemDiv.innerHTML = `
+                <div class="flex-grow w-full sm:w-auto">
+                    <input type="text" placeholder="議題名" value="${escapeHtml(name)}" required
+                        class="item-name w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                </div>
+                <div class="flex gap-2 w-full sm:w-auto justify-between sm:justify-start">
+                    <div class="flex items-center gap-1">
+                        <input type="number" min="1" placeholder="分" value="${time}" required
+                            class="item-time w-20 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-right">
+                        <span class="text-sm text-slate-500">分</span>
+                    </div>
+                    <select class="item-type px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white text-sm">
+                        <option value="flex" ${type === 'flex' ? 'selected' : ''}>可変 (Flex)</option>
+                        <option value="fix" ${type === 'fix' ? 'selected' : ''}>固定 (Fix)</option>
+                    </select>
+                    <button type="button" class="remove-item-btn p-2 text-slate-400 hover:text-red-500 transition rounded-lg">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
+                          <path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.158 3.21c-1.39.2-2.8.3-4.21.3a59.14 59.14 0 01-4.21-.3m-10.25 0c.342-.052.682-.107 1.022-.166m10.25 0V5.625c0-1.084-.91-1.96-2.04-1.96h-2.1c-1.13 0-2.04.876-2.04 1.96v.15m7.5 0h-5.25" />
+                        </svg>
+                    </button>
+                </div>
+            `;
+
+            itemDiv.querySelector('.remove-item-btn').addEventListener('click', () => {
+                itemDiv.remove();
+                updateTotalTime();
+            });
+
+            itemDiv.querySelector('.item-time').addEventListener('input', updateTotalTime);
+            container.appendChild(itemDiv);
+        }
+
+        function updateTotalTime() {
+            const timeInputs = document.querySelectorAll('.item-time');
+            let total = 0;
+            timeInputs.forEach(input => {
+                total += parseInt(input.value || 0);
+            });
+            document.getElementById('total-time-display').textContent = total;
+        }
+
+        async function loadTemplateData(templateId) {
+            try {
+                const docRef = doc(db, `users/${currentUser.uid}/templates`, templateId);
+                const docSnap = await getDoc(docRef);
+
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    // 今日の日付を入れて会議名にする
+                    const todayStr = new Date().toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric' });
+                    document.getElementById('meeting-name').value = `${data.name} (${todayStr})`;
+                    
+                    if (data.items && data.items.length > 0) {
+                        data.items.forEach(item => {
+                            addAgendaItem(item.name, item.time, item.type);
+                        });
+                    }
+                    updateTotalTime();
+                }
+            } catch (error) {
+                console.error("読み込みエラー:", error);
+                alert("ひな形の読み込みに失敗しました。");
+            }
+        }
+
+        // 会議データの作成とタイマー画面への遷移
+        async function handleStartMeeting(e) {
+            e.preventDefault();
+            
+            const name = document.getElementById('meeting-name').value.trim();
+            const startTime = document.getElementById('start-time').value;
+            const itemElements = document.querySelectorAll('.agenda-item');
+            
+            if (itemElements.length === 0) {
+                alert("議題を1つ以上追加してください。");
+                return;
+            }
+
+            const items = [];
+            itemElements.forEach(el => {
+                const timeMin = parseInt(el.querySelector('.item-time').value) || 0;
+                items.push({
+                    name: el.querySelector('.item-name').value.trim(),
+                    originalTimeMin: timeMin, // 当初の予定時間(分)
+                    calculatedTimeSec: timeMin * 60, // 動的再計算される時間(秒)
+                    actualTimeSec: null, // 実際にかかった時間(秒)
+                    type: el.querySelector('.item-type').value
+                });
+            });
+
+            const startBtn = document.getElementById('start-btn');
+            startBtn.disabled = true;
+            startBtn.innerHTML = "準備中...";
+
+            try {
+                // recordsコレクションに新規ドキュメントを作成
+                const newRecordRef = doc(collection(db, `users/${currentUser.uid}/records`));
+                await setDoc(newRecordRef, {
+                    name: name,
+                    startTime: startTime,
+                    items: items,
+                    status: 'running',
+                    createdAt: new Date()
+                });
+
+                // 作成したIDをパラメータに渡してタイマー画面へ
+                window.location.href = `timer.html?id=${newRecordRef.id}`;
+
+            } catch (error) {
+                console.error("開始エラー:", error);
+                alert("会議の開始処理に失敗しました。");
+                startBtn.disabled = false;
+                startBtn.innerHTML = "会議を開始する";
+            }
+        }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return str.replace(/[&<>"']/g, function(match) {
+                const escape = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+                return escape[match];
+            });
+        }
+    </script>
+</body>
+</html>
