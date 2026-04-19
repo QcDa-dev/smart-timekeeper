@@ -7,6 +7,8 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="common.css">
+    <!-- ドラッグ＆ドロップ用ライブラリ -->
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
 </head>
 <body>
 
@@ -17,7 +19,6 @@
         </div>
 
         <form id="create-form" class="space-y-6">
-            <!-- 会議の基本情報 -->
             <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
@@ -33,7 +34,6 @@
                 </div>
             </div>
 
-            <!-- アジェンダ（議題）リスト -->
             <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
                 <div class="flex justify-between items-center mb-4">
                     <h2 class="text-lg font-bold text-slate-800">議題リスト（今回用）</h2>
@@ -43,11 +43,11 @@
                 </div>
                 
                 <p class="text-xs text-slate-500 mb-4">
-                    ※事前セットアップを読み込んだ場合でも、今回の会議に合わせて項目を追加・修正できます。
+                    ※左端の「≡」をドラッグして順番を入れ替えられます。
                 </p>
 
                 <div id="items-container" class="space-y-3">
-                    <!-- JavaScriptで項目が追加されます -->
+                    <!-- JSで項目が追加されます -->
                 </div>
 
                 <button type="button" id="add-item-btn" class="mt-6 w-full py-3 border-2 border-dashed border-slate-300 text-slate-600 font-medium rounded-xl hover:bg-slate-50 hover:border-blue-400 hover:text-blue-600 transition flex justify-center items-center gap-2">
@@ -58,7 +58,6 @@
                 </button>
             </div>
 
-            <!-- アクションボタン -->
             <div class="flex flex-col sm:flex-row justify-end gap-3 pt-4">
                 <button type="button" id="save-setup-btn" class="px-6 py-3 bg-white border border-slate-300 text-slate-700 font-bold rounded-xl shadow-sm hover:bg-slate-50 transition flex items-center justify-center gap-2">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5 text-teal-600">
@@ -67,7 +66,7 @@
                     事前セットアップとして保存
                 </button>
                 <button type="submit" id="start-btn" class="px-8 py-3 bg-blue-600 text-white font-bold rounded-xl shadow-lg hover:bg-blue-700 transition flex items-center justify-center gap-2">
-                    会議を開始する
+                    会議を作成・開始する
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5">
                       <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z" />
                     </svg>
@@ -91,8 +90,8 @@
             document.getElementById('start-time').value = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
             setupEventListeners();
+            initSortable();
 
-            // ひな形 -> 事前セットアップ のパラメータ名変更 (setupId)
             const urlParams = new URLSearchParams(window.location.search);
             const setupId = urlParams.get('setupId');
             if (setupId) {
@@ -102,6 +101,15 @@
                 updateTotalTime();
             }
         });
+
+        function initSortable() {
+            const container = document.getElementById('items-container');
+            Sortable.create(container, {
+                handle: '.drag-handle',
+                animation: 150,
+                ghostClass: 'sortable-ghost'
+            });
+        }
 
         function setupEventListeners() {
             document.getElementById('add-item-btn').addEventListener('click', () => {
@@ -118,11 +126,14 @@
             itemDiv.className = 'agenda-item flex flex-col sm:flex-row gap-3 items-center bg-slate-50 p-3 rounded-xl border border-slate-200';
 
             itemDiv.innerHTML = `
+                <div class="drag-handle p-2 text-slate-400 hover:text-slate-600 flex items-center justify-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" /></svg>
+                </div>
                 <div class="flex-grow w-full sm:w-auto">
                     <input type="text" placeholder="議題名" value="${escapeHtml(name)}" required
                         class="item-name w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
                 </div>
-                <div class="flex gap-2 w-full sm:w-auto justify-between sm:justify-start">
+                <div class="flex gap-2 w-full sm:w-auto justify-between sm:justify-start items-center">
                     <div class="flex items-center gap-1">
                         <input type="number" min="1" placeholder="分" value="${time}" required
                             class="item-time w-20 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-right">
@@ -133,9 +144,7 @@
                         <option value="fix" ${type === 'fix' ? 'selected' : ''}>固定 (Fix)</option>
                     </select>
                     <button type="button" class="remove-item-btn p-2 text-slate-400 hover:text-red-500 transition rounded-lg">
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
-                          <path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.158 3.21c-1.39.2-2.8.3-4.21.3a59.14 59.14 0 01-4.21-.3m-10.25 0c.342-.052.682-.107 1.022-.166m10.25 0V5.625c0-1.084-.91-1.96-2.04-1.96h-2.1c-1.13 0-2.04.876-2.04 1.96v.15m7.5 0h-5.25" />
-                        </svg>
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.158 3.21c-1.39.2-2.8.3-4.21.3a59.14 59.14 0 01-4.21-.3m-10.25 0c.342-.052.682-.107 1.022-.166m10.25 0V5.625c0-1.084-.91-1.96-2.04-1.96h-2.1c-1.13 0-2.04.876-2.04 1.96v.15m7.5 0h-5.25" /></svg>
                     </button>
                 </div>
             `;
@@ -217,8 +226,20 @@
         async function handleStartMeeting(e) {
             e.preventDefault();
             
+            // ▼ 追加: 開始予定時刻の過去チェック ▼
+            const startTimeStr = document.getElementById('start-time').value;
+            const now = new Date();
+            const [hours, minutes] = startTimeStr.split(':').map(Number);
+            
+            const selectedTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hours, minutes, 0, 0);
+            const currentTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), now.getMinutes(), 0, 0);
+
+            if (selectedTime < currentTime) {
+                alert("開始予定時刻は現在時刻以降に設定してください。");
+                return;
+            }
+            
             const name = document.getElementById('meeting-name').value.trim();
-            const startTime = document.getElementById('start-time').value;
             const itemElements = document.querySelectorAll('.agenda-item');
             
             if (itemElements.length === 0) {
@@ -246,9 +267,9 @@
                 const newRecordRef = doc(collection(db, `users/${currentUser.uid}/records`));
                 await setDoc(newRecordRef, {
                     name: name,
-                    startTime: startTime,
+                    startTime: startTimeStr,
                     items: items,
-                    status: 'running',
+                    status: 'created',
                     createdAt: new Date()
                 });
 
@@ -256,9 +277,9 @@
 
             } catch (error) {
                 console.error("開始エラー:", error);
-                alert("会議の開始処理に失敗しました。");
+                alert("会議の作成に失敗しました。");
                 startBtn.disabled = false;
-                startBtn.innerHTML = "会議を開始する";
+                startBtn.innerHTML = "会議を作成・開始する";
             }
         }
 
