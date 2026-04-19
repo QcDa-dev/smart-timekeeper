@@ -54,6 +54,13 @@ export const initCommonUI = (pageTitle = "Smart TimeKeeper") => {
                 <a href="https://qcda-dev.github.io/HP/community-guidelines.html" target="_blank" rel="noopener noreferrer" class="sub-link">コミュニティガイドライン</a>
             </div>
 
+            <!-- ログアウトボタン領域（未ログイン時は隠す） -->
+            <div id="logout-menu-item" class="menu-separator hidden">
+                <a href="#" id="logout-link" class="text-red-500 hover:bg-red-50 hover:text-red-600 font-bold">
+                    ログアウト
+                </a>
+            </div>
+
             <div class="version-info">ver 1.0.0</div>
         </div>
         <div id="menuOverlay"></div>
@@ -86,12 +93,32 @@ export const initCommonUI = (pageTitle = "Smart TimeKeeper") => {
 
     hamburgerBtn.addEventListener('click', toggleMenu);
     menuOverlay.addEventListener('click', toggleMenu);
+
+    // ログアウト処理の紐付け
+    setTimeout(() => {
+        const logoutLink = document.getElementById('logout-link');
+        if (logoutLink) {
+            logoutLink.addEventListener('click', (e) => {
+                e.preventDefault();
+                handleLogout();
+            });
+        }
+    }, 0);
 };
 
 // --- Authentication ロジック ---
 export const authGuard = (requireLogin = true, redirectUrl = 'login.html') => {
     return new Promise((resolve) => {
         onAuthStateChanged(auth, (user) => {
+            
+            // ログイン状態に応じてログアウトボタンの表示を切り替え
+            const logoutMenuItem = document.getElementById('logout-menu-item');
+            if (user && logoutMenuItem) {
+                logoutMenuItem.classList.remove('hidden');
+            } else if (!user && logoutMenuItem) {
+                logoutMenuItem.classList.add('hidden');
+            }
+
             if (requireLogin && !user) {
                 window.location.replace(redirectUrl);
             } else if (!requireLogin && user) {
@@ -118,7 +145,7 @@ export const handleLogin = async () => {
 export const handleLogout = async () => {
     try {
         await signOut(auth);
-        window.location.href = 'index.html';
+        window.location.href = 'index.html'; // ログアウト後はトップへ
     } catch (error) {
         console.error("Logout failed:", error);
     }
