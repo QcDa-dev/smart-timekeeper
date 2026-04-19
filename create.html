@@ -43,7 +43,7 @@
                 </div>
                 
                 <p class="text-xs text-slate-500 mb-4">
-                    ※ひな形を読み込んだ場合でも、今回の会議に合わせて項目を追加・修正できます。
+                    ※事前セットアップを読み込んだ場合でも、今回の会議に合わせて項目を追加・修正できます。
                 </p>
 
                 <div id="items-container" class="space-y-3">
@@ -60,11 +60,11 @@
 
             <!-- アクションボタン -->
             <div class="flex flex-col sm:flex-row justify-end gap-3 pt-4">
-                <button type="button" id="save-template-btn" class="px-6 py-3 bg-white border border-slate-300 text-slate-700 font-bold rounded-xl shadow-sm hover:bg-slate-50 transition flex items-center justify-center gap-2">
+                <button type="button" id="save-setup-btn" class="px-6 py-3 bg-white border border-slate-300 text-slate-700 font-bold rounded-xl shadow-sm hover:bg-slate-50 transition flex items-center justify-center gap-2">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5 text-teal-600">
                       <path stroke-linecap="round" stroke-linejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0 1 11.186 0Z" />
                     </svg>
-                    現在の内容をひな形として保存
+                    事前セットアップとして保存
                 </button>
                 <button type="submit" id="start-btn" class="px-8 py-3 bg-blue-600 text-white font-bold rounded-xl shadow-lg hover:bg-blue-700 transition flex items-center justify-center gap-2">
                     会議を開始する
@@ -87,19 +87,18 @@
             currentUser = await authGuard(true, 'login.html');
             if (!currentUser) return;
 
-            // 現在時刻を開始予定時刻のデフォルトに設定
             const now = new Date();
             document.getElementById('start-time').value = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
             setupEventListeners();
 
-            // URLにtemplateIdがあれば、ひな形を読み込む
+            // ひな形 -> 事前セットアップ のパラメータ名変更 (setupId)
             const urlParams = new URLSearchParams(window.location.search);
-            const templateId = urlParams.get('templateId');
-            if (templateId) {
-                await loadTemplateData(templateId);
+            const setupId = urlParams.get('setupId');
+            if (setupId) {
+                await loadSetupData(setupId);
             } else {
-                addAgendaItem(); // 空の項目を1つ追加
+                addAgendaItem();
                 updateTotalTime();
             }
         });
@@ -110,12 +109,9 @@
                 updateTotalTime();
             });
             document.getElementById('create-form').addEventListener('submit', handleStartMeeting);
-            
-            // ひな形として保存ボタンのイベント
-            document.getElementById('save-template-btn').addEventListener('click', handleSaveAsTemplate);
+            document.getElementById('save-setup-btn').addEventListener('click', handleSaveAsSetup);
         }
 
-        // 議題アイテムのDOMを生成して追加
         function addAgendaItem(name = '', time = 10, type = 'flex') {
             const container = document.getElementById('items-container');
             const itemDiv = document.createElement('div');
@@ -162,14 +158,13 @@
             document.getElementById('total-time-display').textContent = total;
         }
 
-        async function loadTemplateData(templateId) {
+        async function loadSetupData(setupId) {
             try {
-                const docRef = doc(db, `users/${currentUser.uid}/templates`, templateId);
+                const docRef = doc(db, `users/${currentUser.uid}/setups`, setupId);
                 const docSnap = await getDoc(docRef);
 
                 if (docSnap.exists()) {
                     const data = docSnap.data();
-                    // 今日の日付を入れて会議名にする
                     const todayStr = new Date().toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric' });
                     document.getElementById('meeting-name').value = `${data.name} (${todayStr})`;
                     
@@ -182,20 +177,19 @@
                 }
             } catch (error) {
                 console.error("読み込みエラー:", error);
-                alert("ひな形の読み込みに失敗しました。");
+                alert("事前セットアップの読み込みに失敗しました。");
             }
         }
 
-        // ▼ 追加: ひな形として保存する処理 ▼
-        async function handleSaveAsTemplate() {
+        async function handleSaveAsSetup() {
             const itemElements = document.querySelectorAll('.agenda-item');
             if (itemElements.length === 0) {
                 alert("保存する議題がありません。");
                 return;
             }
 
-            const templateName = prompt("保存するひな形の名前を入力してください", "新しいひな形");
-            if (!templateName) return; // キャンセルされた場合
+            const setupName = prompt("保存する事前セットアップの名前を入力してください", "新しいフォーマット");
+            if (!setupName) return; 
 
             const items = [];
             itemElements.forEach(el => {
@@ -207,21 +201,19 @@
             });
 
             try {
-                // 新しいドキュメントとして templates コレクションに保存
-                const newTemplateRef = doc(collection(db, `users/${currentUser.uid}/templates`));
-                await setDoc(newTemplateRef, {
-                    name: templateName,
+                const newSetupRef = doc(collection(db, `users/${currentUser.uid}/setups`));
+                await setDoc(newSetupRef, {
+                    name: setupName,
                     items: items,
                     updatedAt: new Date()
                 });
-                alert(`「${templateName}」をひな形として保存しました！\n（会議を開始するには「会議を開始する」ボタンを押してください）`);
+                alert(`「${setupName}」を事前セットアップとして保存しました！`);
             } catch (error) {
                 console.error("保存エラー:", error);
-                alert("ひな形の保存に失敗しました。");
+                alert("事前セットアップの保存に失敗しました。");
             }
         }
 
-        // 会議データの作成とタイマー画面への遷移
         async function handleStartMeeting(e) {
             e.preventDefault();
             
@@ -239,9 +231,9 @@
                 const timeMin = parseInt(el.querySelector('.item-time').value) || 0;
                 items.push({
                     name: el.querySelector('.item-name').value.trim(),
-                    originalTimeMin: timeMin, // 当初の予定時間(分)
-                    calculatedTimeSec: timeMin * 60, // 動的再計算される時間(秒)
-                    actualTimeSec: null, // 実際にかかった時間(秒)
+                    originalTimeMin: timeMin,
+                    calculatedTimeSec: timeMin * 60,
+                    actualTimeSec: null,
                     type: el.querySelector('.item-type').value
                 });
             });
@@ -251,7 +243,6 @@
             startBtn.innerHTML = "準備中...";
 
             try {
-                // recordsコレクションに新規ドキュメントを作成
                 const newRecordRef = doc(collection(db, `users/${currentUser.uid}/records`));
                 await setDoc(newRecordRef, {
                     name: name,
@@ -261,7 +252,6 @@
                     createdAt: new Date()
                 });
 
-                // 作成したIDをパラメータに渡してタイマー画面へ
                 window.location.href = `timer.html?id=${newRecordRef.id}`;
 
             } catch (error) {
