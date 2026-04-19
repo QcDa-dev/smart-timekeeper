@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>新しい会議を始める | Smart TimeKeeper</title>
+    <title>会議を始める | Smart TimeKeeper</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="common.css">
@@ -14,7 +14,7 @@
 
     <main class="py-8 px-4 sm:px-6 max-w-3xl mx-auto w-full">
         <div class="mb-6 flex items-center justify-between">
-            <h1 class="text-2xl font-bold text-slate-800">新しい会議を始める</h1>
+            <h1 class="text-2xl font-bold text-slate-800">会議を始める</h1>
             <button onclick="window.location.href='dashboard.html'" class="text-sm text-slate-500 hover:text-slate-800 underline">キャンセル</button>
         </div>
 
@@ -43,7 +43,7 @@
                 </div>
                 
                 <p class="text-xs text-slate-500 mb-4">
-                    ※左端の「≡」をドラッグして順番を入れ替えられます。
+                    ※フォーマットを読み込んだ場合でも、今回の会議に合わせて項目を追加・修正できます。
                 </p>
 
                 <div id="items-container" class="space-y-3">
@@ -59,14 +59,14 @@
             </div>
 
             <div class="flex flex-col sm:flex-row justify-end gap-3 pt-4">
-                <button type="button" id="save-setup-btn" class="px-6 py-3 bg-white border border-slate-300 text-slate-700 font-bold rounded-xl shadow-sm hover:bg-slate-50 transition flex items-center justify-center gap-2">
+                <button type="button" id="save-format-btn" class="px-6 py-3 bg-white border border-slate-300 text-slate-700 font-bold rounded-xl shadow-sm hover:bg-slate-50 transition flex items-center justify-center gap-2">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5 text-teal-600">
                       <path stroke-linecap="round" stroke-linejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0 1 11.186 0Z" />
                     </svg>
-                    事前セットアップとして保存
+                    フォーマットとして保存
                 </button>
                 <button type="submit" id="start-btn" class="px-8 py-3 bg-blue-600 text-white font-bold rounded-xl shadow-lg hover:bg-blue-700 transition flex items-center justify-center gap-2">
-                    会議を作成・開始する
+                    会議を始める
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5">
                       <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z" />
                     </svg>
@@ -93,9 +93,9 @@
             initSortable();
 
             const urlParams = new URLSearchParams(window.location.search);
-            const setupId = urlParams.get('setupId');
-            if (setupId) {
-                await loadSetupData(setupId);
+            const formatId = urlParams.get('formatId');
+            if (formatId) {
+                await loadFormatData(formatId);
             } else {
                 addAgendaItem();
                 updateTotalTime();
@@ -117,7 +117,7 @@
                 updateTotalTime();
             });
             document.getElementById('create-form').addEventListener('submit', handleStartMeeting);
-            document.getElementById('save-setup-btn').addEventListener('click', handleSaveAsSetup);
+            document.getElementById('save-format-btn').addEventListener('click', handleSaveAsFormat);
         }
 
         function addAgendaItem(name = '', time = 10, type = 'flex') {
@@ -167,9 +167,9 @@
             document.getElementById('total-time-display').textContent = total;
         }
 
-        async function loadSetupData(setupId) {
+        async function loadFormatData(formatId) {
             try {
-                const docRef = doc(db, `users/${currentUser.uid}/setups`, setupId);
+                const docRef = doc(db, `users/${currentUser.uid}/formats`, formatId);
                 const docSnap = await getDoc(docRef);
 
                 if (docSnap.exists()) {
@@ -186,19 +186,19 @@
                 }
             } catch (error) {
                 console.error("読み込みエラー:", error);
-                alert("事前セットアップの読み込みに失敗しました。");
+                alert("フォーマットの読み込みに失敗しました。");
             }
         }
 
-        async function handleSaveAsSetup() {
+        async function handleSaveAsFormat() {
             const itemElements = document.querySelectorAll('.agenda-item');
             if (itemElements.length === 0) {
                 alert("保存する議題がありません。");
                 return;
             }
 
-            const setupName = prompt("保存する事前セットアップの名前を入力してください", "新しいフォーマット");
-            if (!setupName) return; 
+            const formatName = prompt("保存するフォーマットの名前を入力してください", "新しいフォーマット");
+            if (!formatName) return; 
 
             const items = [];
             itemElements.forEach(el => {
@@ -210,16 +210,17 @@
             });
 
             try {
-                const newSetupRef = doc(collection(db, `users/${currentUser.uid}/setups`));
-                await setDoc(newSetupRef, {
-                    name: setupName,
+                const newFormatRef = doc(collection(db, `users/${currentUser.uid}/formats`));
+                await setDoc(newFormatRef, {
+                    name: formatName,
                     items: items,
+                    order: Date.now(), // 新規作成時は最後尾になるように適当な数値を入れる
                     updatedAt: new Date()
                 });
-                alert(`「${setupName}」を事前セットアップとして保存しました！`);
+                alert(`「${formatName}」をフォーマットとして保存しました！`);
             } catch (error) {
                 console.error("保存エラー:", error);
-                alert("事前セットアップの保存に失敗しました。");
+                alert("フォーマットの保存に失敗しました。");
             }
         }
 
