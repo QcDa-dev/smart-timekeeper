@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ひな形の編集 | Smart TimeKeeper</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="common.css">
+    <style>
+        /* ドラッグ時のスタイル調整用（将来拡張用） */
+        .agenda-item { transition: all 0.2s; }
+    </style>
+</head>
+<body>
+
+    <main class="py-8 px-4 sm:px-6 max-w-3xl mx-auto w-full">
+        <div class="mb-6 flex items-center justify-between">
+            <h1 id="page-title" class="text-2xl font-bold text-slate-800">ひな形の作成</h1>
+            <button onclick="window.location.href='dashboard.html'" class="text-sm text-slate-500 hover:text-slate-800 underline">キャンセル</button>
+        </div>
+
+        <form id="template-form" class="space-y-6">
+            <!-- ひな形名 -->
+            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                <label for="template-name" class="block text-sm font-bold text-slate-700 mb-2">ひな形名</label>
+                <input type="text" id="template-name" placeholder="例：週次進捗会議" required
+                    class="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition">
+            </div>
+
+            <!-- アジェンダ（議題）リスト -->
+            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-lg font-bold text-slate-800">議題リスト</h2>
+                    <div class="text-sm font-medium text-slate-500">
+                        合計: <span id="total-time-display" class="text-blue-600 font-bold text-lg">0</span> 分
+                    </div>
+                </div>
+                
+                <p class="text-xs text-slate-500 mb-4">
+                    ※「可変」に設定した項目は、会議が押した際に自動で時間が短縮調整されます。絶対に時間を削りたくない項目は「固定」にしてください。
+                </p>
+
+                <div id="items-container" class="space-y-3">
+                    <!-- JavaScriptで項目が追加されます -->
+                </div>
+
+                <button type="button" id="add-item-btn" class="mt-6 w-full py-3 border-2 border-dashed border-slate-300 text-slate-600 font-medium rounded-xl hover:bg-slate-50 hover:border-blue-400 hover:text-blue-600 transition flex justify-center items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                    </svg>
+                    議題を追加する
+                </button>
+            </div>
+
+            <!-- アクションボタン -->
+            <div class="flex justify-end gap-3 pt-4">
+                <button type="button" id="delete-btn" class="hidden px-6 py-3 bg-red-50 text-red-600 font-bold rounded-xl hover:bg-red-100 transition">
+                    削除
+                </button>
+                <button type="submit" id="save-btn" class="px-8 py-3 bg-blue-600 text-white font-bold rounded-xl shadow-lg hover:bg-blue-700 transition flex items-center gap-2">
+                    保存する
+                </button>
+            </div>
+        </form>
+    </main>
+
+    <script type="module">
+        import { initCommonUI, authGuard, db } from './common.js';
+        import { doc, getDoc, setDoc, deleteDoc, collection } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        let currentUser = null;
+        let templateId = null;
+
+        // URLからIDを取得
+        const urlParams = new URLSearchParams(window.location.search);
+        templateId = urlParams.get('id');
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            initCommonUI("Smart TimeKeeper");
+            currentUser = await authGuard(true, 'login.html');
+            if (!currentUser) return;
+
+            setupEventListeners();
+
+            if (templateId) {
+                document.getElementById('page-title').textContent = "ひな形の編集";
+                document.getElementById('delete-btn').classList.remove('hidden');
+                await loadTemplateData();
+            } else {
+                // 新規作成時はデフォルトで1つ空の項目を追加しておく
+                addAgendaItem();
+            }
+            updateTotalTime();
+        });
+
+        function setupEventListeners() {
+            document.getElementById('add-item-btn').addEventListener('click', () => {
+                addAgendaItem();
+                updateTotalTime();
+            });
+
+            document.getElementById('template-form').addEventListener('submit', handleSave);
+            
+            document.getElementById('delete-btn').addEventListener('click', handleDelete);
+        }
+
+        // 議題アイテムのDOMを生成して追加
+        function addAgendaItem(name = '', time = 10, type = 'flex') {
+            const container = document.getElementById('items-container');
+            const itemDiv = document.createElement('div');
+            itemDiv.className = 'agenda-item flex flex-col sm:flex-row gap-3 items-center bg-slate-50 p-3 rounded-xl border border-slate-200';
+
+            itemDiv.innerHTML = `
+                <div class="flex-grow w-full sm:w-auto">
+                    <input type="text" placeholder="議題名" value="${escapeHtml(name)}" required
+                        class="item-name w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                </div>
+                <div class="flex gap-2 w-full sm:w-auto justify-between sm:justify-start">
+                    <div class="flex items-center gap-1">
+                        <input type="number" min="1" placeholder="分" value="${time}" required
+                            class="item-time w-20 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-right">
+                        <span class="text-sm text-slate-500">分</span>
+                    </div>
+                    <select class="item-type px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white text-sm">
+                        <option value="flex" ${type === 'flex' ? 'selected' : ''}>可変 (Flex)</option>
+                        <option value="fix" ${type === 'fix' ? 'selected' : ''}>固定 (Fix)</option>
+                    </select>
+                    <button type="button" class="remove-item-btn p-2 text-slate-400 hover:text-red-500 transition rounded-lg">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
+                          <path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.158 3.21c-1.39.2-2.8.3-4.21.3a59.14 59.14 0 01-4.21-.3m-10.25 0c.342-.052.682-.107 1.022-.166m10.25 0V5.625c0-1.084-.91-1.96-2.04-1.96h-2.1c-1.13 0-2.04.876-2.04 1.96v.15m7.5 0h-5.25" />
+                        </svg>
+                    </button>
+                </div>
+            `;
+
+            // 削除ボタンのイベント
+            itemDiv.querySelector('.remove-item-btn').addEventListener('click', () => {
+                itemDiv.remove();
+                updateTotalTime();
+            });
+
+            // 時間変更時に合計時間を更新
+            itemDiv.querySelector('.item-time').addEventListener('input', updateTotalTime);
+
+            container.appendChild(itemDiv);
+        }
+
+        // 合計時間の計算と表示更新
+        function updateTotalTime() {
+            const timeInputs = document.querySelectorAll('.item-time');
+            let total = 0;
+            timeInputs.forEach(input => {
+                total += parseInt(input.value || 0);
+            });
+            document.getElementById('total-time-display').textContent = total;
+        }
+
+        // 既存データの読み込み
+        async function loadTemplateData() {
+            try {
+                const docRef = doc(db, `users/${currentUser.uid}/templates`, templateId);
+                const docSnap = await getDoc(docRef);
+
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    document.getElementById('template-name').value = data.name || '';
+                    
+                    if (data.items && data.items.length > 0) {
+                        data.items.forEach(item => {
+                            addAgendaItem(item.name, item.time, item.type);
+                        });
+                    } else {
+                        addAgendaItem();
+                    }
+                    updateTotalTime();
+                } else {
+                    alert("指定されたひな形が見つかりません。");
+                    window.location.href = 'dashboard.html';
+                }
+            } catch (error) {
+                console.error("読み込みエラー:", error);
+                alert("データの読み込みに失敗しました。");
+            }
+        }
+
+        // 保存処理
+        async function handleSave(e) {
+            e.preventDefault();
+            
+            const name = document.getElementById('template-name').value.trim();
+            const itemElements = document.querySelectorAll('.agenda-item');
+            
+            if (itemElements.length === 0) {
+                alert("議題を1つ以上追加してください。");
+                return;
+            }
+
+            const items = [];
+            itemElements.forEach(el => {
+                items.push({
+                    name: el.querySelector('.item-name').value.trim(),
+                    time: parseInt(el.querySelector('.item-time').value) || 0,
+                    type: el.querySelector('.item-type').value
+                });
+            });
+
+            const saveBtn = document.getElementById('save-btn');
+            saveBtn.disabled = true;
+            saveBtn.innerHTML = "保存中...";
+
+            try {
+                // 新規作成の場合はランダムなIDを生成、編集の場合は既存のIDを使用
+                const targetRef = templateId 
+                    ? doc(db, `users/${currentUser.uid}/templates`, templateId)
+                    : doc(collection(db, `users/${currentUser.uid}/templates`));
+
+                await setDoc(targetRef, {
+                    name: name,
+                    items: items,
+                    updatedAt: new Date()
+                }, { merge: true });
+
+                alert("保存しました。");
+                window.location.href = 'dashboard.html';
+
+            } catch (error) {
+                console.error("保存エラー:", error);
+                alert("保存に失敗しました。");
+                saveBtn.disabled = false;
+                saveBtn.innerHTML = "保存する";
+            }
+        }
+
+        // 削除処理
+        async function handleDelete() {
+            if (!confirm("本当にこのひな形を削除しますか？")) return;
+
+            try {
+                await deleteDoc(doc(db, `users/${currentUser.uid}/templates`, templateId));
+                alert("削除しました。");
+                window.location.href = 'dashboard.html';
+            } catch (error) {
+                console.error("削除エラー:", error);
+                alert("削除に失敗しました。");
+            }
+        }
+
+        // XSS対策用
+        function escapeHtml(str) {
+            if (!str) return '';
+            return str.replace(/[&<>"']/g, function(match) {
+                const escape = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+                return escape[match];
+            });
+        }
+    </script>
+</body>
+</html>
