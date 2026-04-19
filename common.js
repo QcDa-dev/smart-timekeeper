@@ -5,12 +5,12 @@ import { getFirestore } from "https://www.gstatic.com/firebasejs/10.8.0/firebase
 
 // --- Configuration ---
 const firebaseConfig = {
-    apiKey: "AIzaSy_DUMMY_KEY_REPLACE_ME",
-    authDomain: "qcda-smart-timekeeper.firebaseapp.com",
-    projectId: "qcda-smart-timekeeper",
-    storageBucket: "qcda-smart-timekeeper.appspot.com",
-    messagingSenderId: "1234567890",
-    appId: "1:1234567890:web:abcdef123456"
+    apiKey: "AIzaSyC2BVmeNeRZvut2JReOmkjF299MmlKuI74",
+    authDomain: "smart-timekeeper.firebaseapp.com",
+    projectId: "smart-timekeeper",
+    storageBucket: "smart-timekeeper.firebasestorage.app",
+    messagingSenderId: "820557203439",
+    appId: "1:820557203439:web:d1f4d25c72e6b08602d81a"
 };
 
 // --- Firebase Initialization ---
