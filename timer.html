@@ -170,14 +170,12 @@
                     } else {
                         // 既に時刻を過ぎている or 再開の場合はすぐスタート
                         if (!meetingData.actualStartTime) {
-                            // 待機画面を経由せず即スタートした場合でも、実際の開始時刻を記録・表示
                             const actualStartTimeStr = formatTimeStr(now);
                             meetingData.actualStartTime = actualStartTimeStr;
                             document.getElementById('actual-start-time').textContent = actualStartTimeStr;
                             updateDoc(docRef, { actualStartTime: actualStartTimeStr }).catch(console.error);
                         }
 
-                        // 初期の「現在の終了予定」を、実際の開始時刻を基準に再計算する
                         const actualStartDt = parseTimeStr(meetingData.actualStartTime);
                         const currentEndDt = new Date(actualStartDt.getTime() + originalTotalSec * 1000);
                         document.getElementById('current-end-time').textContent = formatTimeStr(currentEndDt);
@@ -220,7 +218,7 @@
             isPaused = false;
             document.getElementById('pause-btn').textContent = "一時停止";
             
-            // 初期状態の再計算（過去の進行状況を反映）
+            // 初期状態の再計算
             recalculateFutureTimes();
             updateUI();
 
@@ -228,7 +226,6 @@
                 if (!isPaused) {
                     elapsedSecondsCurrentItem++;
                     
-                    // ▼ リアルタイム再計算のコアロジック ▼
                     // 現在の項目が割り当てられた時間を超過したら、未来のスケジュールを削り始める
                     const currentAssignedSec = meetingData.items[currentIndex].calculatedTimeSec;
                     if (elapsedSecondsCurrentItem > currentAssignedSec) {
@@ -268,7 +265,7 @@
                 return;
             }
 
-            // 次の項目に移った際、早く終わった(巻いた)分の時間を未来のFlex項目に還元する
+            // 次の項目に移った際、巻いた分の時間を未来のFlex項目に還元する
             recalculateFutureTimes();
             updateUI();
         }
@@ -290,9 +287,9 @@
             await finishMeeting();
         }
 
-        // ▼ 未来のスケジュールをリアルタイムで再計算する関数 ▼
+        // ▼ 修正: 未来のスケジュールを正確に再計算する関数 ▼
         function recalculateFutureTimes() {
-            // 現在の項目までの確定消費時間
+            // これまでの確定消費時間
             let consumedSec = 0;
             for (let i = 0; i < currentIndex; i++) {
                 consumedSec += meetingData.items[i].actualTimeSec;
@@ -302,6 +299,15 @@
 
             // 会議全体の残り持ち時間
             let remainingTotalSec = originalTotalSec - consumedSec;
+
+            // 現在進行中項目の、これから消費する予定の残り時間を確保する
+            const currentItemAllocated = meetingData.items[currentIndex].calculatedTimeSec;
+            let currentRemainingSec = currentItemAllocated - elapsedSecondsCurrentItem;
+            // 予定時間を超過している分はすでに consumedSec に入っているので0とする
+            if (currentRemainingSec < 0) currentRemainingSec = 0; 
+
+            // 未来(currentIndex + 1以降)の項目のために残された時間
+            let availableForFutureSec = remainingTotalSec - currentRemainingSec;
 
             // 未来(currentIndex + 1以降)の項目の予定合計
             let futureFixSec = 0;
@@ -315,7 +321,7 @@
             }
 
             // Flex項目へ分配可能な時間
-            let availableFlexSec = remainingTotalSec - futureFixSec;
+            let availableFlexSec = availableForFutureSec - futureFixSec;
             let isOverTime = false;
 
             if (availableFlexSec < 0) {
@@ -330,6 +336,7 @@
                     item.calculatedTimeSec = item.originalTimeMin * 60;
                 } else {
                     if (futureFlexInitialSec > 0) {
+                        // 当初のFlex比率に応じて按分
                         const ratio = (item.originalTimeMin * 60) / futureFlexInitialSec;
                         item.calculatedTimeSec = Math.round(availableFlexSec * ratio);
                     } else {
@@ -371,7 +378,7 @@
 
             updateTimerDisplay();
             updateCurrentEndTime();
-            updateUpcomingList(); // 秒単位で変動するリストを描画
+            updateUpcomingList();
         }
 
         function updateTimerDisplay() {
@@ -390,25 +397,21 @@
         }
 
         function updateCurrentEndTime() {
-            // これまでの実績 + 現在の経過時間
             let totalCalcSec = 0;
             for (let i = 0; i < currentIndex; i++) {
                 totalCalcSec += meetingData.items[i].actualTimeSec;
             }
             totalCalcSec += elapsedSecondsCurrentItem;
             
-            // 現在の項目の計算上の残り時間（まだ超過していない場合のみ加算）
             const currentAssignedSec = meetingData.items[currentIndex].calculatedTimeSec;
             if (elapsedSecondsCurrentItem < currentAssignedSec) {
                 totalCalcSec += (currentAssignedSec - elapsedSecondsCurrentItem);
             }
 
-            // 未来の項目の計算上の時間
             for (let i = currentIndex + 1; i < meetingData.items.length; i++) {
                 totalCalcSec += meetingData.items[i].calculatedTimeSec;
             }
 
-            // 実際の開始時刻を基準にする（未開始の場合は予定時刻）
             const baseTimeStr = meetingData.actualStartTime || meetingData.startTime;
             const startDt = parseTimeStr(baseTimeStr);
             const currentEndDt = new Date(startDt.getTime() + totalCalcSec * 1000);
@@ -426,13 +429,16 @@
 
             for (let i = currentIndex + 1; i < meetingData.items.length; i++) {
                 const item = meetingData.items[i];
-                // リアルタイム感を出すために秒単位まで表示 (オプションで分単位に戻すことも可能)
                 const calcMin = Math.floor(item.calculatedTimeSec / 60);
                 const calcSec = item.calculatedTimeSec % 60;
                 const originalMin = item.originalTimeMin;
                 
                 const isReduced = item.calculatedTimeSec < (originalMin * 60);
-                const timeColorClass = isReduced ? 'text-amber-600 font-bold' : 'text-slate-700';
+                const isIncreased = item.calculatedTimeSec > (originalMin * 60);
+                
+                let timeColorClass = 'text-slate-700';
+                if (isReduced) timeColorClass = 'text-amber-600 font-bold';
+                if (isIncreased) timeColorClass = 'text-blue-600 font-bold';
 
                 const div = document.createElement('div');
                 div.className = 'flex justify-between items-center p-3 bg-slate-50 rounded-lg border border-slate-100';
